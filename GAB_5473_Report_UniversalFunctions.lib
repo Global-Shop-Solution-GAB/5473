@@ -1,0 +1,139 @@
+﻿Program.Sub.Preflight.Start
+V.Global.iARCId.Declare(Long)
+V.Global.iBIRptID.Declare(Long)
+Program.Sub.Preflight.End
+
+Program.Sub.Catching.Start
+	V.Local..BulkDeclareString(sError)
+	F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{0}on line {5}",V.Caller.ScriptFile,V.Ambient.NewLine,V.Ambient.SubroutineCalledFrom,V.Ambient.ErrorDescription,V.Ambient.ErrorDescription,V.Ambient.ErrorLine,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+Program.Sub.Catching.End
+
+Program.Sub.SetARCID.Start
+F.Intrinsic.Control.Try
+	
+	V.Local..BulkDeclareString(sFile,sName,sNameSplit)
+	
+	F.Intrinsic.String.Split(V.Caller.ScriptFile,"\",V.Local.sFile)
+	F.Intrinsic.String.Split(V.Local.sFile(V.Local.sFile.UBound),".",V.Local.sName)
+	F.Intrinsic.String.Split(V.Local.sName,"_",V.Local.sNameSplit)
+	V.Global.iARCID.Set(V.Local.sNameSplit(1).Long)
+	
+	F.Intrinsic.Control.If(V.Global.iARCId,<=,0)
+		F.Intrinsic.UI.Msgbox()
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Catching) 
+F.Intrinsic.Control.EndTry
+Program.Sub.SetARCID.End
+
+Program.Sub.LoadDefaultReport.Start
+F.Intrinsic.Control.Try
+	
+	V.Local..BulkDeclareString(sSQL,sRet,sMsg)
+	
+	F.Intrinsic.Control.CallSub(InitReport)
+	
+	'Set a default report id...
+	F.Intrinsic.String.Build("select top 1 a.Report_Id, a.Description, c.Copies From BIR_USER a join BIR_ACTIVE_SEQ b on a.Report_Id = b.Report_ID join BIR_USER_SEQ c on a.Report_Id = c.Report_ID where b.Active = 1 and a.Description like '%{0}%' and a.Company = '{1}' order by a.Report_ID",V.Global.iARCId,V.Caller.CompanyCode,V.Local.sSql)
+	F.ODBC.Connection!conc.ExecuteAndReturn(V.Local.sSQL,V.Local.sRet)
+	F.Intrinsic.Control.If(V.Local.sRet.Trim,<>,"")
+		F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+		Gui.fMain.txtReportID.Text(V.Local.sRet(0).Trim)
+		Gui.fMain.lblRptDesc.Text(V.Local.sRet(1).Trim)
+		Gui.fMain.txtCopies.Text(V.Local.sRet(2).Trim)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("No report(s) found for this project in Report Maintenance. Please make sure that a report exists with ""{0}"" in the Report Description.",V.Global.iARCId,V.Local.sMsg)
+		F.Intrinsic.UI.Msgbox(V.Local.sMsg,"No Report Found.")
+	F.Intrinsic.Control.EndIf
+	
+	'Retrieve Stored Printer...
+	F.Intrinsic.Control.CallSub(RetrieveStoredPrinter)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Catching) 
+F.Intrinsic.Control.EndTry
+Program.Sub.LoadDefaultReport.End
+
+Program.Sub.InitReport.Start
+F.Intrinsic.Control.Try
+	
+	V.Local..BulkDeclareString(sReportPath,sReportDesc,sMsg)
+	V.Local..BulkDeclareBoolean(bExists)
+
+	'Initialize report
+	F.Intrinsic.String.Build("{0}\LABELS\Custom\GAB_{1}_IV_Part_Master.lab",V.Caller.BusintDir,V.Global.iARCId,V.Local.sReportPath)
+	F.Intrinsic.String.Build("{0} Inventory Part Master Label",V.Global.iARCId,V.Local.sReportDesc)
+	
+	F.Intrinsic.File.Exists(V.Local.sReportPath,V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists)
+		F.Global.BI.InitializeReport(V.Local.sReportDesc,V.Local.sReportPath,V.Global.iBIRptID)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.String.Build("No report file found for this project. Please make sure that this report exists:{2}{0}{2}{2}With description:{2}{1}",V.Local.sReportPath,V.Local.sReportDesc,V.Ambient.NewLine,V.Local.sMsg)
+		F.Intrinsic.UI.Msgbox(V.Local.sMsg,"No Report File Found.")
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Catching)
+F.Intrinsic.Control.EndTry
+Program.Sub.InitReport.End
+
+Program.Sub.RetrieveStoredPrinter.Start
+F.Intrinsic.Control.Try
+	
+	V.Local..BulkDeclareString(sFileName,sSavedPrinter)
+	V.Local..BulkDeclareLong(iUser)
+
+	'Retrieve Last Printer Selection...
+	F.Global.Security.GetUserID(V.Caller.User,V.Caller.CompanyCode,V.Local.iUser)
+	F.Intrinsic.File.GetFileNameFromFQN(V.Caller.ScriptFile,V.Local.sFileName)
+	F.Intrinsic.String.Left(V.Local.sFileName.UCase,50,V.Local.sFileName)
+	F.Global.Registry.ReadValue(V.Local.iUser,V.Caller.CompanyCode,V.Local.sFileName,V.Global.iBIRptID,1000,5,"",V.Local.sSavedPrinter)
+	Gui.fMain.ddlPrinter.Text(V.Local.sSavedPrinter)
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Catching)
+F.Intrinsic.Control.EndTry
+Program.Sub.RetrieveStoredPrinter.End
+
+Program.Sub.cmdSelectReport_Click.Start
+F.Intrinsic.Control.Try
+	
+	V.Local..BulkDeclareString(sSql,sRet,sTitles,sWidths,sMsg)
+	
+	F.Intrinsic.UI.SetBrowserHotTypeAhead(True)
+	
+	F.Intrinsic.String.Split("Report ID*!*Description*!*Copies","*!*",V.Local.sTitles)
+	F.Intrinsic.String.Split("500*!*1800*!*300","*!*",V.Local.sWidths)
+	 
+	F.Intrinsic.String.Build("select distinct a.Report_Id, a.Description, c.Copies From BIR_USER a join BIR_ACTIVE_SEQ b on a.Report_Id = b.Report_ID join BIR_USER_SEQ c on a.Report_Id = c.Report_ID where b.Active = 1 and a.Description like '%{0}%' and a.Company = '{1}' order by a.Report_ID",V.Global.iARCId,V.Caller.CompanyCode,V.Local.sSql)
+	
+	F.Intrinsic.UI.Browser("Select Report ID:","conC",V.Local.sSql,V.Local.sTitles,V.Local.sWidths,6000,8000,V.Local.sRet)
+	
+	F.Intrinsic.Control.If(V.Local.sRet,<>,"***CANCEL***")
+		F.Intrinsic.Control.If(V.Local.sRet,<>,"")
+			F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+			Gui.fMain.txtReportID.Text(V.Local.sRet(0).Trim)
+			V.Global.iBIRptID.Set(V.Local.sRet(0).Trim)
+			Gui.fMain.lblRptDesc.Text(V.Local.sRet(1).Trim)
+			Gui.fMain.txtCopies.Text(V.Local.sRet(2).Trim)
+		F.Intrinsic.Control.Else
+			F.Intrinsic.String.Build("No report(s) found for this project. Please make sure that a report exists with ""{0}"" in the Report Description.",V.Global.iARCId,V.Local.sMsg)
+			F.Intrinsic.UI.Msgbox(V.Local.sMsg,"No Report Found.")
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+	
+	'Retrieve Stored Printer...
+	F.Intrinsic.Control.CallSub(RetrieveStoredPrinter)
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(Catching)
+F.Intrinsic.Control.EndTry
+Program.Sub.cmdSelectReport_Click.End
+
+Program.Sub.Comments.Start
+${$5$}$20.1.8543.32295$}$1
+${$6$}$jwithrow$}$20230804151156089$}$D95tSYIikIvF+oq+s87EtBQePACEH+Ey8W86sZvBxWCU5wooBznWYqWMJE8OU1/JGeW2hbFr9uls21Frociexw==
+Program.Sub.Comments.End
